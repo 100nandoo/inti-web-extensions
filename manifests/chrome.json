@@ -1,0 +1,9 @@
+{
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "permissions": ["sidePanel"],
+  "side_panel": {
+    "default_path": "sidebar/sidebar.html"
+  }
+}

@@ -1,0 +1,31 @@
+export type ActionName =
+  | 'TRIGGER_SUMMARY'
+  | 'EXTRACT'
+  | 'SHOW_OVERLAY'
+  | 'SUMMARY_READY'
+  | 'ERROR';
+
+export interface Message {
+  action: ActionName;
+  payload?: unknown;
+}
+
+export interface ArticleData {
+  title: string;
+  textContent: string;
+  excerpt: string;
+  byline: string | null;
+  length: number;
+}
+
+export interface SummaryData {
+  summary: string;
+  articleTitle: string;
+  timestamp: number;
+}
+
+export type UIState = 'idle' | 'loading' | 'done' | 'error';
+
+export interface Settings {
+  apiUrl: string;
+}
