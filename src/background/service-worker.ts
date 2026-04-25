@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+console.log('Inti background script loading...');
 
 import type { Message, ArticleData, SummaryData, Settings, SummaryResponse } from '../shared/types.js';
 import { getStorage, setStorage } from '../shared/storage.js';
@@ -15,19 +16,23 @@ const isAndroid = navigator.userAgent.includes('Android');
 
 // Create context menu on install
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'summarize-page',
-    title: 'Summarize Page with Inti',
-    contexts: ['page', 'link']
-  });
+  if (chrome.contextMenus) {
+    chrome.contextMenus.create({
+      id: 'summarize-page',
+      title: 'Summarize Page with Inti',
+      contexts: ['page', 'link']
+    });
+  }
 });
 
 // Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'summarize-page' && tab?.id) {
-    triggerFlow(tab);
-  }
-});
+if (chrome.contextMenus) {
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === 'summarize-page' && tab?.id) {
+      triggerFlow(tab);
+    }
+  });
+}
 
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   if (message.action === 'TRIGGER_SUMMARY') {
@@ -42,17 +47,21 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 
 // Toolbar icon click → trigger summary directly (no popup)
 chrome.action.onClicked.addListener((tab) => {
+  console.log('Action clicked', tab.id);
   triggerFlow(tab);
 });
 
 async function triggerFlow(tab: chrome.tabs.Tab) {
-  if (!tab.id) return;
+  if (!tab.id) {
+    console.error('No tab ID in triggerFlow');
+    return;
+  }
   const tabId = tab.id;
 
   if (!isAndroid && chrome.sidePanel) {
     // Chrome desktop: open side panel first; it shows its own loading state
     chrome.sidePanel.open({ tabId }).catch(() => {});
-    handleTriggerSummary().catch((err: unknown) => {
+    handleTriggerSummary(tabId).catch((err: unknown) => {
       broadcastError(String(err));
     });
   } else if (!isAndroid) {
@@ -64,7 +73,7 @@ async function triggerFlow(tab: chrome.tabs.Tab) {
     chrome.tabs.sendMessage(tabId, { action: 'SHOW_LOADING' } satisfies Message).catch(() => {});
 
     try {
-      await handleTriggerSummary();
+      await handleTriggerSummary(tabId);
     } catch (err: unknown) {
       broadcastError(String(err));
     }
@@ -73,13 +82,15 @@ async function triggerFlow(tab: chrome.tabs.Tab) {
     chrome.tabs.sendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message).catch(() => {});
   } else {
     // Android: overlay shows full result inline
-    handleTriggerSummary().catch((err: unknown) => {
+    console.log('Android flow started for tab', tabId);
+    handleTriggerSummary(tabId).catch((err: unknown) => {
+      console.error('Android flow error', err);
       broadcastError(String(err));
     });
   }
 }
 
-async function handleTriggerSummary(): Promise<void> {
+async function handleTriggerSummary(tabId?: number): Promise<void> {
   // 1. Show loading badge and broadcast loading state
   await setBadge(BADGE_LOADING);
   await setStorage(STORAGE_KEY_UI_STATE, 'loading');
@@ -95,19 +106,24 @@ async function handleTriggerSummary(): Promise<void> {
   }
   const apiUrl = baseUrl.replace(/\/$/, '') + '/api/summarize';
 
-  // 3. Get active tab
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab.id) {
+  // 3. Get active tab if not provided
+  let targetTabId = tabId;
+  if (!targetTabId) {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    targetTabId = tab?.id;
+  }
+
+  if (!targetTabId) {
     await setBadge(BADGE_ERROR);
     broadcastError('No active tab found.');
     return;
   }
-  const tabId = tab.id;
 
   // 4. Extract article content via content script
   let articleData: ArticleData;
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {
+    console.log('Sending EXTRACT message to tab', targetTabId);
+    const response = await chrome.tabs.sendMessage(targetTabId, {
       action: 'EXTRACT',
     } satisfies Message) as ArticleData | { error: string };
 
@@ -116,14 +132,16 @@ async function handleTriggerSummary(): Promise<void> {
     }
     articleData = response;
   } catch (e) {
+    console.error('Extraction failed', e);
     await setBadge(BADGE_ERROR);
-    broadcastError(String(e));
+    broadcastError('Could not extract content from this page. Make sure the page is fully loaded.');
     return;
   }
 
   // 5. Call summarization API
   let summary: string;
   try {
+    console.log('Calling API', apiUrl);
     const requestBody: { text: string; instruction?: string } = {
       text: articleData.textContent,
     };
@@ -167,13 +185,14 @@ async function handleTriggerSummary(): Promise<void> {
       } satisfies Message).catch(() => {});
     }
 
-    chrome.tabs.sendMessage(tabId, {
+    chrome.tabs.sendMessage(targetTabId, {
       action: 'SHOW_OVERLAY',
       payload: summaryData,
     } satisfies Message).catch(() => {});
     
     await setStorage(STORAGE_KEY_UI_STATE, 'idle');
   } catch (e) {
+    console.error('API call failed', e);
     await setBadge(BADGE_ERROR);
     await setStorage(STORAGE_KEY_UI_STATE, 'error');
     broadcastError(String(e));

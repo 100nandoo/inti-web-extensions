@@ -31,6 +31,11 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ ok: true });
         return false;
 
+      case 'ERROR':
+        handleShowError(message.payload as string);
+        sendResponse({ ok: true });
+        return false;
+
       default:
         return false;
     }
@@ -141,4 +146,38 @@ function destroyOverlay(): void {
   shadowHost?.remove();
   shadowHost = null;
   shadowRoot = null;
+}
+
+function handleShowError(error: string): void {
+  if (shadowHost) {
+    destroyOverlay();
+  }
+
+  shadowHost = document.createElement('div');
+  shadowHost.id = 'inti-root';
+  Object.assign(shadowHost.style, {
+    position: 'fixed',
+    top: '0',
+    right: '0',
+    width: '0',
+    height: '0',
+    zIndex: '2147483647',
+    pointerEvents: 'none',
+    border: 'none',
+    padding: '0',
+    margin: '0',
+  });
+
+  document.body.appendChild(shadowHost);
+  shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
+
+  overlayInstance = mount(Overlay, {
+    target: shadowRoot as unknown as Document,
+    props: {
+      summary: null,
+      errorMessage: error,
+      state: 'error' as UIState,
+      onClose: destroyOverlay,
+    },
+  });
 }
