@@ -12,6 +12,22 @@ import {
 
 const isAndroid = navigator.userAgent.includes('Android');
 
+// Create context menu on install
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'summarize-page',
+    title: 'Summarize Page with Inti',
+    contexts: ['page', 'link']
+  });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'summarize-page' && tab?.id) {
+    triggerFlow(tab);
+  }
+});
+
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   if (message.action === 'TRIGGER_SUMMARY') {
     handleTriggerSummary().catch((err: unknown) => {
@@ -22,6 +38,45 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
   }
   return false;
 });
+
+// Toolbar icon click → trigger summary directly (no popup)
+chrome.action.onClicked.addListener((tab) => {
+  triggerFlow(tab);
+});
+
+async function triggerFlow(tab: chrome.tabs.Tab) {
+  if (!tab.id) return;
+  const tabId = tab.id;
+
+  if (!isAndroid && chrome.sidePanel) {
+    // Chrome desktop: open side panel first; it shows its own loading state
+    chrome.sidePanel.open({ tabId }).catch(() => {});
+    handleTriggerSummary().catch((err: unknown) => {
+      broadcastError(String(err));
+    });
+  } else if (!isAndroid) {
+    // Firefox desktop: open sidebar IMMEDIATELY to preserve user gesture
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (chrome as any).sidebarAction?.open?.().catch?.(() => {});
+
+    // Show loading overlay immediately for instant feedback
+    chrome.tabs.sendMessage(tabId, { action: 'SHOW_LOADING' } satisfies Message).catch(() => {});
+
+    try {
+      await handleTriggerSummary();
+    } catch (err: unknown) {
+      broadcastError(String(err));
+    }
+
+    // Dismiss the loading overlay once summary is ready (sidebar will show result)
+    chrome.tabs.sendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message).catch(() => {});
+  } else {
+    // Android: overlay shows full result inline
+    handleTriggerSummary().catch((err: unknown) => {
+      broadcastError(String(err));
+    });
+  }
+}
 
 async function handleTriggerSummary(): Promise<void> {
   // 1. Show loading badge
@@ -85,35 +140,39 @@ async function handleTriggerSummary(): Promise<void> {
 
     const json = await res.json() as SummaryResponse;
     summary = json.summary;
+    const provider = json.provider;
+    const model = json.model;
+
+    // 6. Persist result
+    const summaryData: SummaryData = {
+      summary,
+      articleTitle: articleData.title,
+      timestamp: Date.now(),
+      provider,
+      model,
+    };
+    await setStorage(STORAGE_KEY_LAST_SUMMARY, summaryData);
+
+    // 7. Success badge
+    await setBadge(BADGE_SUCCESS);
+
+    // 8. Route to UI surfaces
+    if (!isAndroid) {
+      chrome.runtime.sendMessage({
+        action: 'SUMMARY_READY',
+        payload: summaryData,
+      } satisfies Message).catch(() => {});
+    }
+
+    chrome.tabs.sendMessage(tabId, {
+      action: 'SHOW_OVERLAY',
+      payload: summaryData,
+    } satisfies Message).catch(() => {});
   } catch (e) {
     await setBadge(BADGE_ERROR);
     broadcastError(String(e));
     return;
   }
-
-  // 6. Persist result
-  const summaryData: SummaryData = {
-    summary,
-    articleTitle: articleData.title,
-    timestamp: Date.now(),
-  };
-  await setStorage(STORAGE_KEY_LAST_SUMMARY, summaryData);
-
-  // 7. Success badge
-  await setBadge(BADGE_SUCCESS);
-
-  // 8. Route to UI surfaces
-  if (!isAndroid) {
-    chrome.runtime.sendMessage({
-      action: 'SUMMARY_READY',
-      payload: summaryData,
-    } satisfies Message).catch(() => {});
-  }
-
-  chrome.tabs.sendMessage(tabId, {
-    action: 'SHOW_OVERLAY',
-    payload: summaryData,
-  } satisfies Message).catch(() => {});
 }
 
 async function setBadge(badge: { text: string; color: string }): Promise<void> {

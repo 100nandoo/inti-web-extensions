@@ -1,7 +1,9 @@
 export type ActionName =
   | 'TRIGGER_SUMMARY'
   | 'EXTRACT'
+  | 'SHOW_LOADING'
   | 'SHOW_OVERLAY'
+  | 'HIDE_OVERLAY'
   | 'SUMMARY_READY'
   | 'ERROR';
 
@@ -22,6 +24,8 @@ export interface SummaryData {
   summary: string;
   articleTitle: string;
   timestamp: number;
+  provider?: string;
+  model?: string;
 }
 
 export type UIState = 'idle' | 'loading' | 'done' | 'error';

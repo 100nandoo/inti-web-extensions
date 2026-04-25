@@ -16,8 +16,18 @@ chrome.runtime.onMessage.addListener(
         handleExtract(sendResponse);
         return true; // keep channel open for async sendResponse
 
+      case 'SHOW_LOADING':
+        handleShowLoading();
+        sendResponse({ ok: true });
+        return false;
+
       case 'SHOW_OVERLAY':
         handleShowOverlay(message.payload as SummaryData);
+        sendResponse({ ok: true });
+        return false;
+
+      case 'HIDE_OVERLAY':
+        destroyOverlay();
         sendResponse({ ok: true });
         return false;
 
@@ -50,6 +60,39 @@ function handleExtract(
   } catch (e) {
     sendResponse({ error: String(e) });
   }
+}
+
+function handleShowLoading(): void {
+  if (shadowHost) {
+    destroyOverlay();
+  }
+
+  shadowHost = document.createElement('div');
+  shadowHost.id = 'inti-root';
+  Object.assign(shadowHost.style, {
+    position: 'fixed',
+    top: '0',
+    right: '0',
+    width: '0',
+    height: '0',
+    zIndex: '2147483647',
+    pointerEvents: 'none',
+    border: 'none',
+    padding: '0',
+    margin: '0',
+  });
+
+  document.body.appendChild(shadowHost);
+  shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
+
+  overlayInstance = mount(Overlay, {
+    target: shadowRoot as unknown as Document,
+    props: {
+      summary: null,
+      state: 'loading' as UIState,
+      onClose: destroyOverlay,
+    },
+  });
 }
 
 function handleShowOverlay(summaryData: SummaryData): void {

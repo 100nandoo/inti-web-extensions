@@ -33,7 +33,12 @@
 
 <div class="summary">
   <h2 class="title">{summary.articleTitle}</h2>
-  <p class="meta">Summarized {formattedDate}</p>
+  <p class="meta">
+    Summarized {formattedDate}
+    {#if summary.provider || summary.model}
+      • {summary.provider ?? ''} {summary.model ?? ''}
+    {/if}
+  </p>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -->
   <div class="md-body">{@html renderedSummary}</div>
   <button class="copy-btn" onclick={copyToClipboard}>
