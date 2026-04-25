@@ -13,6 +13,7 @@
   let uiState = $state<UIState>('idle');
   let summary = $state<SummaryData | null>(null);
   let errorMessage = $state('');
+  let hasAutoTriggered = $state(false);
 
   $effect(() => {
     // Restore last summary from storage on open
@@ -37,9 +38,17 @@
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   });
 
+  $effect(() => {
+    if (isAndroid && !showSettings && !hasAutoTriggered) {
+      hasAutoTriggered = true;
+      triggerSummary();
+    }
+  });
+
   async function triggerSummary() {
     uiState = 'loading';
     errorMessage = '';
+    summary = null;
     chrome.runtime.sendMessage({ action: 'TRIGGER_SUMMARY' } satisfies Message).catch(() => {});
 
     // On Chrome desktop, open the side panel
