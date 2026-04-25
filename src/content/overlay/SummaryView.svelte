@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { SummaryData } from '../../shared/types.js';
-  import { marked } from 'marked';
+  import type { SummaryData } from "../../shared/types.js";
+  import { marked } from "marked";
 
   let { summary }: { summary: SummaryData } = $props();
 
@@ -9,15 +9,15 @@
 
   const formattedDate = $derived(
     new Date(summary.timestamp).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
   );
 
   const renderedSummary = $derived(
-    marked.parse(summary.summary, { async: false, breaks: true }) as string
+    marked.parse(summary.summary, { async: false, breaks: true }) as string,
   );
 
   async function copyToClipboard() {
@@ -36,13 +36,13 @@
   <p class="meta">
     Summarized {formattedDate}
     {#if summary.provider || summary.model}
-      • {summary.provider ?? ''} {summary.model ?? ''}
+      • {summary.provider ?? ""} • {summary.model ?? ""}
     {/if}
   </p>
   <!-- eslint-disable-next-line svelte/no-at-html-tags -->
   <div class="md-body">{@html renderedSummary}</div>
   <button class="copy-btn" onclick={copyToClipboard}>
-    {copied ? '✓ Copied!' : 'Copy to clipboard'}
+    {copied ? "✓ Copied!" : "Copy to clipboard"}
   </button>
 </div>
 
@@ -173,7 +173,9 @@
     color: var(--text-secondary);
     font-size: 0.8rem;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
   }
 
   .copy-btn:hover {

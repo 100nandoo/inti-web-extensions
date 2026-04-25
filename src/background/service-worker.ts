@@ -5,6 +5,7 @@ import { getStorage, setStorage } from '../shared/storage.js';
 import {
   STORAGE_KEY_LAST_SUMMARY,
   STORAGE_KEY_SETTINGS,
+  STORAGE_KEY_UI_STATE,
   BADGE_LOADING,
   BADGE_SUCCESS,
   BADGE_ERROR,
@@ -79,8 +80,10 @@ async function triggerFlow(tab: chrome.tabs.Tab) {
 }
 
 async function handleTriggerSummary(): Promise<void> {
-  // 1. Show loading badge
+  // 1. Show loading badge and broadcast loading state
   await setBadge(BADGE_LOADING);
+  await setStorage(STORAGE_KEY_UI_STATE, 'loading');
+  chrome.runtime.sendMessage({ action: 'SHOW_LOADING' } satisfies Message).catch(() => {});
 
   // 2. Read API URL from settings
   const settings = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
@@ -168,8 +171,11 @@ async function handleTriggerSummary(): Promise<void> {
       action: 'SHOW_OVERLAY',
       payload: summaryData,
     } satisfies Message).catch(() => {});
+    
+    await setStorage(STORAGE_KEY_UI_STATE, 'idle');
   } catch (e) {
     await setBadge(BADGE_ERROR);
+    await setStorage(STORAGE_KEY_UI_STATE, 'error');
     broadcastError(String(e));
     return;
   }

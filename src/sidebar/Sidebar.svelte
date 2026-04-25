@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SummaryData, UIState, Message, Settings } from '../shared/types.js';
   import { getStorage } from '../shared/storage.js';
-  import { STORAGE_KEY_LAST_SUMMARY, STORAGE_KEY_SETTINGS } from '../shared/constants.js';
+  import { STORAGE_KEY_LAST_SUMMARY, STORAGE_KEY_SETTINGS, STORAGE_KEY_UI_STATE } from '../shared/constants.js';
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
   import ErrorState from '../content/overlay/ErrorState.svelte';
@@ -15,9 +15,16 @@
   $effect(() => {
     // Restore last summary from storage when sidebar opens
     getStorage<SummaryData>(STORAGE_KEY_LAST_SUMMARY).then((stored) => {
-      if (stored) {
+      if (stored && uiState === 'idle') {
         summary = stored;
         uiState = 'done';
+      }
+    });
+
+    // Check if a summary is currently in progress
+    getStorage<UIState>(STORAGE_KEY_UI_STATE).then((state) => {
+      if (state === 'loading') {
+        uiState = 'loading';
       }
     });
 
@@ -35,6 +42,9 @@
       } else if (message.action === 'ERROR') {
         errorMessage = message.payload as string;
         uiState = 'error';
+      } else if (message.action === 'SHOW_LOADING') {
+        uiState = 'loading';
+        errorMessage = '';
       }
     }
     chrome.runtime.onMessage.addListener(onMessage);
