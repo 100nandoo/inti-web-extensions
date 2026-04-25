@@ -5,9 +5,11 @@
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
   import ErrorState from '../content/overlay/ErrorState.svelte';
+  import SettingsPanel from '../shared/SettingsPanel.svelte';
 
   const isAndroid = navigator.userAgent.includes('Android');
 
+  let showSettings = $state(false);
   let uiState = $state<UIState>('idle');
   let summary = $state<SummaryData | null>(null);
   let errorMessage = $state('');
@@ -55,7 +57,17 @@
 <div class="root">
   <header>
     <span class="brand">Inti</span>
+    <button
+      class="icon-btn"
+      onclick={() => (showSettings = !showSettings)}
+      aria-label="Settings"
+      aria-pressed={showSettings}
+    >⚙</button>
   </header>
+
+  {#if showSettings}
+    <SettingsPanel onclose={() => (showSettings = false)} />
+  {/if}
 
   {#if !isAndroid}
     <!-- Desktop: launcher only — results appear in the sidebar -->
@@ -121,6 +133,10 @@
     border-bottom: 1px solid #f3f4f6;
   }
 
+  header {
+    justify-content: space-between;
+  }
+
   .brand {
     font-weight: 700;
     font-size: 0.875rem;
@@ -128,6 +144,21 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    font-size: 1rem;
+    padding: 0.2rem;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+
+  .icon-btn:hover,
+  .icon-btn[aria-pressed="true"] { color: #3b82f6; }
 
   .launcher,
   .full-ui {

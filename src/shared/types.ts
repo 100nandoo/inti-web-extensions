@@ -28,4 +28,21 @@ export type UIState = 'idle' | 'loading' | 'done' | 'error';
 
 export interface Settings {
   apiUrl: string;
+  instruction?: string;
+}
+
+export interface RateLimits {
+  limitRequests?: string;
+  limitTokens?: string;
+  remainingRequests?: string;
+  remainingTokens?: string;
+  resetRequests?: string;
+  resetTokens?: string;
+}
+
+export interface SummaryResponse {
+  summary: string;
+  provider?: string;
+  model?: string;
+  rateLimits?: RateLimits;
 }

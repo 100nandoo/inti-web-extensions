@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import type { Message, ArticleData, SummaryData, Settings } from '../shared/types.js';
+import type { Message, ArticleData, SummaryData, Settings, SummaryResponse } from '../shared/types.js';
 import { getStorage, setStorage } from '../shared/storage.js';
 import {
   STORAGE_KEY_LAST_SUMMARY,
@@ -29,12 +29,13 @@ async function handleTriggerSummary(): Promise<void> {
 
   // 2. Read API URL from settings
   const settings = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
-  const apiUrl = settings?.apiUrl?.trim();
-  if (!apiUrl) {
+  const baseUrl = settings?.apiUrl?.trim();
+  if (!baseUrl) {
     await setBadge(BADGE_ERROR);
     broadcastError('API URL not configured. Open Inti settings to set it up.');
     return;
   }
+  const apiUrl = baseUrl.replace(/\/$/, '') + '/api/summarize';
 
   // 3. Get active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -65,17 +66,24 @@ async function handleTriggerSummary(): Promise<void> {
   // 5. Call summarization API
   let summary: string;
   try {
+    const requestBody: { text: string; instruction?: string } = {
+      text: articleData.textContent,
+    };
+    if (settings?.instruction?.trim()) {
+      requestBody.instruction = settings.instruction.trim();
+    }
+
     const res = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: articleData.title, text: articleData.textContent }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
       throw new Error(`API responded with status ${res.status}`);
     }
 
-    const json = await res.json() as { summary: string };
+    const json = await res.json() as SummaryResponse;
     summary = json.summary;
   } catch (e) {
     await setBadge(BADGE_ERROR);

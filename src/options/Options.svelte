@@ -4,26 +4,32 @@
   import { STORAGE_KEY_SETTINGS } from '../shared/constants.js';
 
   let apiUrl = $state('');
+  let instruction = $state('');
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
       if (stored?.apiUrl) apiUrl = stored.apiUrl;
+      if (stored?.instruction) instruction = stored.instruction;
     });
   });
 
   async function save() {
     const trimmed = apiUrl.trim();
     try {
-      new URL(trimmed); // validate URL
+      new URL(trimmed);
     } catch {
       saveStatus = 'error';
       scheduleReset();
       return;
     }
 
-    await setStorage<Settings>(STORAGE_KEY_SETTINGS, { apiUrl: trimmed });
+    const settings: Settings = { apiUrl: trimmed };
+    if (instruction.trim()) {
+      settings.instruction = instruction.trim();
+    }
+    await setStorage<Settings>(STORAGE_KEY_SETTINGS, settings);
     saveStatus = 'saved';
     scheduleReset();
   }
@@ -45,16 +51,16 @@
 
   <main>
     <section>
-      <label for="api-url">API URL</label>
+      <label for="api-url">Inti Server URL</label>
       <p class="description">
-        The URL of your self-hosted Inti API. The extension will POST article
-        text to this endpoint and expect a <code>{"{ summary }"}</code> response.
+        The base URL of your Inti server. The extension will POST to
+        <code>/api/summarize</code> on this server.
       </p>
       <div class="input-row">
         <input
           id="api-url"
           type="url"
-          placeholder="https://your-api.com/summarize"
+          placeholder="http://127.0.0.1:8080"
           bind:value={apiUrl}
           onkeydown={(e) => e.key === 'Enter' && save()}
           class:invalid={saveStatus === 'error'}
@@ -66,6 +72,21 @@
       {:else if saveStatus === 'error'}
         <p class="status error">Enter a valid URL.</p>
       {/if}
+    </section>
+
+    <section>
+      <label for="instruction">Summarization Instruction</label>
+      <p class="description">
+        Optional: provide custom instructions for how the API should summarize articles.
+        If left empty, the API will use its default summarization prompt.
+      </p>
+      <textarea
+        id="instruction"
+        placeholder="e.g., Summarize in 2-3 sentences, focusing on key facts..."
+        bind:value={instruction}
+        onkeydown={(e) => (e.ctrlKey || e.metaKey) && e.key === 'Enter' && save()}
+      ></textarea>
+      <button onclick={save}>Save</button>
     </section>
   </main>
 </div>
@@ -159,6 +180,24 @@
 
   input[type="url"].invalid {
     border-color: #ef4444;
+  }
+
+  textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-family: ui-monospace, monospace;
+    background: #fff;
+    transition: border-color 0.15s;
+    resize: vertical;
+    min-height: 6rem;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 
   button {

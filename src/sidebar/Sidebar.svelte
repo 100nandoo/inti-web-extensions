@@ -5,7 +5,9 @@
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
   import ErrorState from '../content/overlay/ErrorState.svelte';
+  import SettingsPanel from '../shared/SettingsPanel.svelte';
 
+  let showSettings = $state(false);
   let uiState = $state<UIState>('idle');
   let summary = $state<SummaryData | null>(null);
   let errorMessage = $state('');
@@ -43,14 +45,26 @@
 <div class="root">
   <header>
     <span class="brand">Inti</span>
-    <button
-      class="summarize-btn"
-      onclick={triggerSummary}
-      disabled={uiState === 'loading'}
-    >
-      {uiState === 'loading' ? 'Summarizing…' : 'Summarize'}
-    </button>
+    <div class="header-actions">
+      <button
+        class="summarize-btn"
+        onclick={triggerSummary}
+        disabled={uiState === 'loading'}
+      >
+        {uiState === 'loading' ? 'Summarizing…' : 'Summarize'}
+      </button>
+      <button
+        class="icon-btn"
+        onclick={() => (showSettings = !showSettings)}
+        aria-label="Settings"
+        aria-pressed={showSettings}
+      >⚙</button>
+    </div>
   </header>
+
+  {#if showSettings}
+    <SettingsPanel onclose={() => (showSettings = false)} />
+  {/if}
 
   <div class="body">
     {#if uiState === 'loading'}
@@ -104,6 +118,27 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    font-size: 1rem;
+    padding: 0.2rem;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+
+  .icon-btn:hover,
+  .icon-btn[aria-pressed="true"] { color: #3b82f6; }
 
   .summarize-btn {
     padding: 0.4rem 0.9rem;
