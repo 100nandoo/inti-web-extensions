@@ -56,6 +56,13 @@ The last summary is saved locally and restored the next time you open the extens
 
 ---
 
+## Keyboard Shortcuts
+
+- **Alt + Shift + S** (Mac: **Cmd + Shift + S**): Summarize the current page.
+- **Ctrl + Shift + Y** (Mac: **Cmd + Shift + Y**): Toggle the sidebar (Firefox Desktop only).
+
+---
+
 ## Contributing
 
 See [docs/contributing.md](docs/contributing.md) for the development setup, build commands, and project architecture.
