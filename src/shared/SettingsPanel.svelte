@@ -6,14 +6,30 @@
   let { onclose }: { onclose?: () => void } = $props();
 
   let apiUrl = $state('');
+  let theme = $state<'light' | 'dark'>('light');
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
       if (stored?.apiUrl) apiUrl = stored.apiUrl;
+      if (stored?.theme) {
+        theme = stored.theme;
+        applyTheme(stored.theme);
+      }
     });
   });
+
+  function applyTheme(t: 'light' | 'dark') {
+    document.documentElement.setAttribute('data-theme', t);
+  }
+
+  async function toggleTheme() {
+    theme = theme === 'light' ? 'dark' : 'light';
+    applyTheme(theme);
+    const stored = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
+    await setStorage<Settings>(STORAGE_KEY_SETTINGS, { ...(stored ?? { apiUrl }), theme });
+  }
 
   async function save() {
     const trimmed = apiUrl.trim();
@@ -24,7 +40,8 @@
       scheduleReset();
       return;
     }
-    await setStorage<Settings>(STORAGE_KEY_SETTINGS, { apiUrl: trimmed });
+    const stored = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
+    await setStorage<Settings>(STORAGE_KEY_SETTINGS, { ...(stored ?? {}), apiUrl: trimmed });
     saveStatus = 'saved';
     scheduleReset();
   }
@@ -41,9 +58,27 @@
 <div class="panel">
   <div class="panel-header">
     <span class="panel-title">Settings</span>
-    {#if onclose}
-      <button class="close-btn" onclick={onclose} aria-label="Close settings">✕</button>
-    {/if}
+    <div class="header-right">
+      <button
+        class="theme-toggle"
+        onclick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      >
+        {#if theme === 'dark'}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" />
+          </svg>
+        {:else}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clip-rule="evenodd" />
+          </svg>
+        {/if}
+      </button>
+      {#if onclose}
+        <button class="close-btn" onclick={onclose} aria-label="Close settings">✕</button>
+      {/if}
+    </div>
   </div>
 
   <div class="field">
@@ -73,8 +108,9 @@
     flex-direction: column;
     gap: 0.75rem;
     padding: 0.875rem 1rem 1rem;
-    border-top: 1px solid #f3f4f6;
-    background: #fafafa;
+    border-top: 1px solid var(--border);
+    background: var(--bg-panel);
+    transition: background 0.2s, border-color 0.2s;
   }
 
   .panel-header {
@@ -86,23 +122,51 @@
   .panel-title {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .theme-toggle:hover {
+    color: var(--accent);
+    background: var(--bg-hover);
   }
 
   .close-btn {
     background: none;
     border: none;
     cursor: pointer;
-    color: #9ca3af;
+    color: var(--text-muted);
     font-size: 0.75rem;
     padding: 0.2rem 0.4rem;
     border-radius: 4px;
     line-height: 1;
+    transition: color 0.15s, background 0.15s;
   }
 
-  .close-btn:hover { color: #111827; background: #f3f4f6; }
+  .close-btn:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
 
   .field {
     display: flex;
@@ -113,7 +177,7 @@
   label {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--text-secondary);
   }
 
   .input-row {
@@ -124,25 +188,26 @@
   input[type="url"] {
     flex: 1;
     padding: 0.4rem 0.6rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border-input);
     border-radius: 5px;
     font-size: 0.8rem;
     font-family: ui-monospace, monospace;
-    background: #fff;
-    transition: border-color 0.15s;
+    background: var(--bg-input);
+    color: var(--text);
+    transition: border-color 0.15s, background 0.2s;
   }
 
   input[type="url"]:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-shadow);
   }
 
   input.invalid { border-color: #ef4444; }
 
   button {
     padding: 0.4rem 0.9rem;
-    background: #3b82f6;
+    background: var(--accent);
     color: #fff;
     border: none;
     border-radius: 5px;
@@ -153,7 +218,7 @@
     transition: background 0.15s;
   }
 
-  button:hover { background: #2563eb; }
+  button:hover { background: var(--accent-hover); }
 
   .status {
     font-size: 0.75rem;

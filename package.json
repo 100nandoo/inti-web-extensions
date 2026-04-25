@@ -16,7 +16,8 @@
     "icons": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {
-    "@mozilla/readability": "latest"
+    "@mozilla/readability": "latest",
+    "marked": "^18.0.2"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

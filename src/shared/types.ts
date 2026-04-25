@@ -29,6 +29,7 @@ export type UIState = 'idle' | 'loading' | 'done' | 'error';
 export interface Settings {
   apiUrl: string;
   instruction?: string;
+  theme?: 'light' | 'dark';
 }
 
 export interface RateLimits {

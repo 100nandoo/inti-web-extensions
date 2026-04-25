@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { SummaryData, UIState, Message } from '../shared/types.js';
+  import type { SummaryData, UIState, Message, Settings } from '../shared/types.js';
   import { getStorage } from '../shared/storage.js';
-  import { STORAGE_KEY_LAST_SUMMARY } from '../shared/constants.js';
+  import { STORAGE_KEY_LAST_SUMMARY, STORAGE_KEY_SETTINGS } from '../shared/constants.js';
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
   import ErrorState from '../content/overlay/ErrorState.svelte';
@@ -19,6 +19,12 @@
         summary = stored;
         uiState = 'done';
       }
+    });
+
+    // Apply saved theme on mount
+    getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
+      const t = stored?.theme ?? 'light';
+      document.documentElement.setAttribute('data-theme', t);
     });
 
     // Listen for updates from the service worker
@@ -82,6 +88,51 @@
 </div>
 
 <style>
+  /* ─── Theme tokens ─── */
+  :global(:root), :global([data-theme="light"]) {
+    --bg:          #ffffff;
+    --bg-panel:    #fafafa;
+    --bg-input:    #ffffff;
+    --bg-hover:    #f3f4f6;
+    --text:        #111827;
+    --text-secondary: #374151;
+    --text-muted:  #6b7280;
+    --border:      #f3f4f6;
+    --border-input:#d1d5db;
+    --accent:      #3b82f6;
+    --accent-hover:#2563eb;
+    --accent-shadow: rgba(59,130,246,0.15);
+    --summary-text:#374151;
+    --copy-btn-bg: #f9fafb;
+    --copy-btn-border: #d1d5db;
+    --copy-btn-hover: #f3f4f6;
+    --loading-color:#9ca3af;
+    --skeleton-from:#f3f4f6;
+    --skeleton-to:  #e5e7eb;
+  }
+
+  :global([data-theme="dark"]) {
+    --bg:          #0f1117;
+    --bg-panel:    #1a1d27;
+    --bg-input:    #1e2130;
+    --bg-hover:    #252836;
+    --text:        #e2e8f0;
+    --text-secondary: #cbd5e1;
+    --text-muted:  #64748b;
+    --border:      #252836;
+    --border-input:#334155;
+    --accent:      #60a5fa;
+    --accent-hover:#3b82f6;
+    --accent-shadow: rgba(96,165,250,0.2);
+    --summary-text:#cbd5e1;
+    --copy-btn-bg: #1e2130;
+    --copy-btn-border: #334155;
+    --copy-btn-hover: #252836;
+    --loading-color:#64748b;
+    --skeleton-from:#1e2130;
+    --skeleton-to:  #252836;
+  }
+
   :global(*, *::before, *::after) {
     box-sizing: border-box;
   }
@@ -90,10 +141,11 @@
     margin: 0;
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    color: #111827;
-    background: #ffffff;
+    color: var(--text);
+    background: var(--bg);
     height: 100vh;
     overflow: hidden;
+    transition: background 0.2s, color 0.2s;
   }
 
   .root {
@@ -107,14 +159,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.875rem 1rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    transition: border-color 0.2s;
   }
 
   .brand {
     font-weight: 700;
     font-size: 0.875rem;
-    color: #3b82f6;
+    color: var(--accent);
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
@@ -129,7 +182,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: #9ca3af;
+    color: var(--text-muted);
     font-size: 1rem;
     padding: 0.2rem;
     border-radius: 4px;
@@ -138,11 +191,11 @@
   }
 
   .icon-btn:hover,
-  .icon-btn[aria-pressed="true"] { color: #3b82f6; }
+  .icon-btn[aria-pressed="true"] { color: var(--accent); }
 
   .summarize-btn {
     padding: 0.4rem 0.9rem;
-    background: #3b82f6;
+    background: var(--accent);
     color: #ffffff;
     border: none;
     border-radius: 6px;
@@ -153,7 +206,7 @@
   }
 
   .summarize-btn:hover:not(:disabled) {
-    background: #2563eb;
+    background: var(--accent-hover);
   }
 
   .summarize-btn:disabled {
@@ -177,7 +230,7 @@
 
   .empty p {
     margin: 0;
-    color: #9ca3af;
+    color: var(--text-muted);
     font-size: 0.875rem;
     line-height: 1.6;
     max-width: 200px;
