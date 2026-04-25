@@ -19,6 +19,7 @@
     "@mozilla/readability": "latest"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@sveltejs/vite-plugin-svelte": "^4",
     "@types/chrome": "latest",
     "@types/mozilla-readability": "latest",
