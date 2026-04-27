@@ -9,38 +9,40 @@ let shadowRoot: ShadowRoot | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let overlayInstance: any = null;
 
-chrome.runtime.onMessage.addListener(
-  (message: Message, _sender, sendResponse) => {
-    switch (message.action) {
-      case 'EXTRACT':
-        handleExtract(sendResponse);
-        return true; // keep channel open for async sendResponse
+export function initContentScript(): void {
+  chrome.runtime.onMessage.addListener(
+    (message: Message, _sender, sendResponse) => {
+      switch (message.action) {
+        case 'EXTRACT':
+          handleExtract(sendResponse);
+          return true; // keep channel open for async sendResponse
 
-      case 'SHOW_LOADING':
-        handleShowLoading();
-        sendResponse({ ok: true });
-        return false;
+        case 'SHOW_LOADING':
+          handleShowLoading();
+          sendResponse({ ok: true });
+          return false;
 
-      case 'SHOW_OVERLAY':
-        handleShowOverlay(message.payload as SummaryData);
-        sendResponse({ ok: true });
-        return false;
+        case 'SHOW_OVERLAY':
+          handleShowOverlay(message.payload as SummaryData);
+          sendResponse({ ok: true });
+          return false;
 
-      case 'HIDE_OVERLAY':
-        destroyOverlay();
-        sendResponse({ ok: true });
-        return false;
+        case 'HIDE_OVERLAY':
+          destroyOverlay();
+          sendResponse({ ok: true });
+          return false;
 
-      case 'ERROR':
-        handleShowError(message.payload as string);
-        sendResponse({ ok: true });
-        return false;
+        case 'ERROR':
+          handleShowError(message.payload as string);
+          sendResponse({ ok: true });
+          return false;
 
-      default:
-        return false;
+        default:
+          return false;
+      }
     }
-  }
-);
+  );
+}
 
 function handleExtract(
   sendResponse: (response: ArticleData | { error: string }) => void

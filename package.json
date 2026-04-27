@@ -4,15 +4,16 @@
   "type": "module",
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "dev": "vite build --config vite.scripts.config.ts --watch & vite build --watch",
-    "build:vite": "vite build --config vite.scripts.config.ts && vite build",
-    "build": "pnpm run build:vite && tsx scripts/build-manifests.ts --target all",
-    "build:chrome": "pnpm run build:vite && tsx scripts/build-manifests.ts --target chrome",
-    "build:firefox-desktop": "pnpm run build:vite && tsx scripts/build-manifests.ts --target firefox-desktop",
-    "build:firefox-android": "pnpm run build:vite && tsx scripts/build-manifests.ts --target firefox-android",
-    "package:chrome": "pnpm run build:chrome && zip -r dist/chrome.zip dist/chrome/",
-    "package:firefox-desktop": "pnpm run build:firefox-desktop && zip -r dist/firefox-desktop.zip dist/firefox-desktop/",
-    "package:firefox-android": "pnpm run build:firefox-android && zip -r dist/firefox-android.zip dist/firefox-android/",
+    "dev": "wxt -b firefox",
+    "dev:chrome": "wxt -b chrome --mv3",
+    "dev:firefox": "wxt -b firefox",
+    "build": "pnpm run build:chrome && pnpm run build:firefox-desktop",
+    "build:chrome": "wxt build -b chrome --mv3",
+    "build:firefox-desktop": "wxt build -b firefox",
+    "build:firefox-android": "wxt build -b firefox",
+    "package:chrome": "pnpm run build:chrome && cd dist/chrome-mv3 && zip -r ../chrome.zip .",
+    "package:firefox-desktop": "pnpm run build:firefox-desktop && cd dist/firefox-mv2 && zip -r ../firefox-desktop.zip .",
+    "package:firefox-android": "pnpm run build:firefox-android && cd dist/firefox-mv2 && zip -r ../firefox-android.zip .",
     "icons": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {
@@ -21,12 +22,17 @@
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "@sveltejs/vite-plugin-svelte": "^4",
     "@types/chrome": "latest",
     "@types/mozilla-readability": "latest",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0-next.6",
     "svelte": "latest",
     "tsx": "latest",
     "typescript": "latest",
-    "vite": "^5"
+    "wxt": "0.19.29"
+  },
+  "pnpm": {
+    "overrides": {
+      "@sveltejs/vite-plugin-svelte": "^4.0.0-next.6"
+    }
   }
 }

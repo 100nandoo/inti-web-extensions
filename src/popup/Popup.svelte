@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SummaryData, UIState, Message } from '../shared/types.js';
   import { getStorage } from '../shared/storage.js';
+  import { ignoreAsyncResult, runtimeSendMessage, tabsQuery } from '../shared/webext.js';
   import { STORAGE_KEY_LAST_SUMMARY } from '../shared/constants.js';
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
@@ -49,12 +50,12 @@
     uiState = 'loading';
     errorMessage = '';
     summary = null;
-    chrome.runtime.sendMessage({ action: 'TRIGGER_SUMMARY' } satisfies Message).catch(() => {});
+    ignoreAsyncResult(runtimeSendMessage({ action: 'TRIGGER_SUMMARY' } satisfies Message));
 
     // On Chrome desktop, open the side panel
     if (!isAndroid && chrome.sidePanel) {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await tabsQuery({ active: true, currentWindow: true });
         if (tab.id) await chrome.sidePanel.open({ tabId: tab.id });
       } catch {
         // sidePanel.open may fail on restricted pages — ignore

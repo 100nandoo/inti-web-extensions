@@ -32,6 +32,7 @@ export type UIState = 'idle' | 'loading' | 'done' | 'error';
 
 export interface Settings {
   apiUrl: string;
+  apiKey?: string;
   instruction?: string;
   theme?: 'light' | 'dark';
 }

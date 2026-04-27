@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SummaryData, UIState, Message, Settings } from '../shared/types.js';
   import { getStorage } from '../shared/storage.js';
+  import { ignoreAsyncResult, runtimeSendMessage } from '../shared/webext.js';
   import { STORAGE_KEY_LAST_SUMMARY, STORAGE_KEY_SETTINGS, STORAGE_KEY_UI_STATE } from '../shared/constants.js';
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
@@ -54,7 +55,7 @@
   function triggerSummary() {
     uiState = 'loading';
     errorMessage = '';
-    chrome.runtime.sendMessage({ action: 'TRIGGER_SUMMARY' } satisfies Message).catch(() => {});
+    ignoreAsyncResult(runtimeSendMessage({ action: 'TRIGGER_SUMMARY' } satisfies Message));
   }
 </script>
 

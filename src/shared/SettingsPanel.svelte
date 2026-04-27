@@ -6,6 +6,7 @@
   let { onclose }: { onclose?: () => void } = $props();
 
   let apiUrl = $state('');
+  let apiKey = $state('');
   let theme = $state<'light' | 'dark'>('light');
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -13,6 +14,7 @@
   $effect(() => {
     getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
       if (stored?.apiUrl) apiUrl = stored.apiUrl;
+      if (stored?.apiKey) apiKey = stored.apiKey;
       if (stored?.theme) {
         theme = stored.theme;
         applyTheme(stored.theme);
@@ -33,6 +35,7 @@
 
   async function save() {
     const trimmed = apiUrl.trim();
+    const trimmedApiKey = apiKey.trim();
     try {
       new URL(trimmed);
     } catch {
@@ -41,7 +44,13 @@
       return;
     }
     const stored = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
-    await setStorage<Settings>(STORAGE_KEY_SETTINGS, { ...(stored ?? {}), apiUrl: trimmed });
+    const settings: Settings = { ...(stored ?? {}), apiUrl: trimmed };
+    if (trimmedApiKey) {
+      settings.apiKey = trimmedApiKey;
+    } else {
+      delete settings.apiKey;
+    }
+    await setStorage<Settings>(STORAGE_KEY_SETTINGS, settings);
     saveStatus = 'saved';
     scheduleReset();
   }
@@ -99,6 +108,20 @@
     {:else if saveStatus === 'error'}
       <span class="status error">Enter a valid URL.</span>
     {/if}
+  </div>
+
+  <div class="field">
+    <label for="sp-api-key">X-API-Key Header</label>
+    <div class="input-row">
+      <input
+        id="sp-api-key"
+        type="text"
+        placeholder="your-api-key"
+        bind:value={apiKey}
+        onkeydown={(e) => e.key === 'Enter' && save()}
+      />
+      <button onclick={save}>Save</button>
+    </div>
   </div>
 </div>
 
@@ -185,7 +208,8 @@
     gap: 0.4rem;
   }
 
-  input[type="url"] {
+  input[type="url"],
+  input[type="text"] {
     flex: 1;
     padding: 0.4rem 0.6rem;
     border: 1px solid var(--border-input);
@@ -197,7 +221,8 @@
     transition: border-color 0.15s, background 0.2s;
   }
 
-  input[type="url"]:focus {
+  input[type="url"]:focus,
+  input[type="text"]:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-shadow);

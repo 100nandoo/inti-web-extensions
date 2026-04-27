@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
-console.log('Inti background script loading...');
 
 import type { Message, ArticleData, SummaryData, Settings, SummaryResponse } from '../shared/types.js';
 import { getStorage, setStorage } from '../shared/storage.js';
+import { ignoreAsyncResult, runtimeSendMessage, tabsQuery, tabsSendMessage } from '../shared/webext.js';
 import {
   STORAGE_KEY_LAST_SUMMARY,
   STORAGE_KEY_SETTINGS,
@@ -12,46 +12,63 @@ import {
   BADGE_ERROR,
 } from '../shared/constants.js';
 
-const isAndroid = navigator.userAgent.includes('Android');
+type ToolbarActionApi = {
+  onClicked?: {
+    addListener: (callback: (tab: chrome.tabs.Tab) => void) => void;
+  };
+  setBadgeText?: (details: { text: string }) => Promise<void> | void;
+  setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void;
+};
 
-// Create context menu on install
-chrome.runtime.onInstalled.addListener(() => {
+function getToolbarAction(): ToolbarActionApi | undefined {
+  return (chrome.action ?? chrome.browserAction) as ToolbarActionApi | undefined;
+}
+
+export function initBackground(): void {
+  console.log('Inti background script loading...');
+
+  const isAndroid = navigator.userAgent.includes('Android');
+  const toolbarAction = getToolbarAction();
+
+  // Create context menu on install
+  chrome.runtime.onInstalled.addListener(() => {
+    if (chrome.contextMenus) {
+      chrome.contextMenus.create({
+        id: 'summarize-page',
+        title: 'Summarize Page with Inti',
+        contexts: ['page', 'link']
+      });
+    }
+  });
+
+  // Handle context menu clicks
   if (chrome.contextMenus) {
-    chrome.contextMenus.create({
-      id: 'summarize-page',
-      title: 'Summarize Page with Inti',
-      contexts: ['page', 'link']
+    chrome.contextMenus.onClicked.addListener((info, tab) => {
+      if (info.menuItemId === 'summarize-page' && tab?.id) {
+        triggerFlow(tab, isAndroid);
+      }
     });
   }
-});
 
-// Handle context menu clicks
-if (chrome.contextMenus) {
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === 'summarize-page' && tab?.id) {
-      triggerFlow(tab);
+  chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
+    if (message.action === 'TRIGGER_SUMMARY') {
+      handleTriggerSummary(isAndroid).catch((err: unknown) => {
+        broadcastError(String(err));
+      });
+      sendResponse({ ok: true });
+      return false;
     }
+    return false;
+  });
+
+  // Toolbar icon click → trigger summary directly (no popup)
+  toolbarAction?.onClicked?.addListener((tab) => {
+    console.log('Action clicked', tab.id);
+    triggerFlow(tab, isAndroid);
   });
 }
 
-chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
-  if (message.action === 'TRIGGER_SUMMARY') {
-    handleTriggerSummary().catch((err: unknown) => {
-      broadcastError(String(err));
-    });
-    sendResponse({ ok: true });
-    return false;
-  }
-  return false;
-});
-
-// Toolbar icon click → trigger summary directly (no popup)
-chrome.action.onClicked.addListener((tab) => {
-  console.log('Action clicked', tab.id);
-  triggerFlow(tab);
-});
-
-async function triggerFlow(tab: chrome.tabs.Tab) {
+async function triggerFlow(tab: chrome.tabs.Tab, isAndroid: boolean) {
   if (!tab.id) {
     console.error('No tab ID in triggerFlow');
     return;
@@ -60,41 +77,41 @@ async function triggerFlow(tab: chrome.tabs.Tab) {
 
   if (!isAndroid && chrome.sidePanel) {
     // Chrome desktop: open side panel first; it shows its own loading state
-    chrome.sidePanel.open({ tabId }).catch(() => {});
-    handleTriggerSummary(tabId).catch((err: unknown) => {
+    ignoreAsyncResult(chrome.sidePanel.open({ tabId }));
+    handleTriggerSummary(isAndroid, tabId).catch((err: unknown) => {
       broadcastError(String(err));
     });
   } else if (!isAndroid) {
     // Firefox desktop: open sidebar IMMEDIATELY to preserve user gesture
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (chrome as any).sidebarAction?.open?.().catch?.(() => {});
+    ignoreAsyncResult((chrome as any).sidebarAction?.open?.());
 
     // Show loading overlay immediately for instant feedback
-    chrome.tabs.sendMessage(tabId, { action: 'SHOW_LOADING' } satisfies Message).catch(() => {});
+    ignoreAsyncResult(tabsSendMessage(tabId, { action: 'SHOW_LOADING' } satisfies Message));
 
     try {
-      await handleTriggerSummary(tabId);
+      await handleTriggerSummary(isAndroid, tabId);
     } catch (err: unknown) {
       broadcastError(String(err));
     }
 
     // Dismiss the loading overlay once summary is ready (sidebar will show result)
-    chrome.tabs.sendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message).catch(() => {});
+    ignoreAsyncResult(tabsSendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message));
   } else {
     // Android: overlay shows full result inline
     console.log('Android flow started for tab', tabId);
-    handleTriggerSummary(tabId).catch((err: unknown) => {
+    handleTriggerSummary(isAndroid, tabId).catch((err: unknown) => {
       console.error('Android flow error', err);
       broadcastError(String(err));
     });
   }
 }
 
-async function handleTriggerSummary(tabId?: number): Promise<void> {
+async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise<void> {
   // 1. Show loading badge and broadcast loading state
   await setBadge(BADGE_LOADING);
   await setStorage(STORAGE_KEY_UI_STATE, 'loading');
-  chrome.runtime.sendMessage({ action: 'SHOW_LOADING' } satisfies Message).catch(() => {});
+  ignoreAsyncResult(runtimeSendMessage({ action: 'SHOW_LOADING' } satisfies Message));
 
   // 2. Read API URL from settings
   const settings = await getStorage<Settings>(STORAGE_KEY_SETTINGS);
@@ -109,7 +126,7 @@ async function handleTriggerSummary(tabId?: number): Promise<void> {
   // 3. Get active tab if not provided
   let targetTabId = tabId;
   if (!targetTabId) {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const [tab] = await tabsQuery({ active: true, lastFocusedWindow: true });
     targetTabId = tab?.id;
   }
 
@@ -123,9 +140,9 @@ async function handleTriggerSummary(tabId?: number): Promise<void> {
   let articleData: ArticleData;
   try {
     console.log('Sending EXTRACT message to tab', targetTabId);
-    const response = await chrome.tabs.sendMessage(targetTabId, {
+    const response = await tabsSendMessage<ArticleData | { error: string }>(targetTabId, {
       action: 'EXTRACT',
-    } satisfies Message) as ArticleData | { error: string };
+    } satisfies Message);
 
     if ('error' in response) {
       throw new Error(response.error);
@@ -148,10 +165,16 @@ async function handleTriggerSummary(tabId?: number): Promise<void> {
     if (settings?.instruction?.trim()) {
       requestBody.instruction = settings.instruction.trim();
     }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (settings?.apiKey?.trim()) {
+      headers['X-API-Key'] = settings.apiKey.trim();
+    }
 
     const res = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(requestBody),
     });
 
@@ -179,16 +202,16 @@ async function handleTriggerSummary(tabId?: number): Promise<void> {
 
     // 8. Route to UI surfaces
     if (!isAndroid) {
-      chrome.runtime.sendMessage({
+      ignoreAsyncResult(runtimeSendMessage({
         action: 'SUMMARY_READY',
         payload: summaryData,
-      } satisfies Message).catch(() => {});
+      } satisfies Message));
     }
 
-    chrome.tabs.sendMessage(targetTabId, {
+    ignoreAsyncResult(tabsSendMessage(targetTabId, {
       action: 'SHOW_OVERLAY',
       payload: summaryData,
-    } satisfies Message).catch(() => {});
+    } satisfies Message));
     
     await setStorage(STORAGE_KEY_UI_STATE, 'idle');
   } catch (e) {
@@ -201,15 +224,20 @@ async function handleTriggerSummary(tabId?: number): Promise<void> {
 }
 
 async function setBadge(badge: { text: string; color: string }): Promise<void> {
+  const toolbarAction = getToolbarAction();
+  if (!toolbarAction?.setBadgeText || !toolbarAction?.setBadgeBackgroundColor) {
+    return;
+  }
+
   await Promise.all([
-    chrome.action.setBadgeText({ text: badge.text }),
-    chrome.action.setBadgeBackgroundColor({ color: badge.color }),
+    Promise.resolve(toolbarAction.setBadgeText({ text: badge.text })),
+    Promise.resolve(toolbarAction.setBadgeBackgroundColor({ color: badge.color })),
   ]);
 }
 
 function broadcastError(message: string): void {
-  chrome.runtime.sendMessage({
+  ignoreAsyncResult(runtimeSendMessage({
     action: 'ERROR',
     payload: message,
-  } satisfies Message).catch(() => {});
+  } satisfies Message));
 }
