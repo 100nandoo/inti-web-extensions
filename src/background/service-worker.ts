@@ -32,6 +32,48 @@ function getSidebarAction(): SidebarActionApi | undefined {
   return (chrome as typeof chrome & { sidebarAction?: SidebarActionApi }).sidebarAction;
 }
 
+function isExtensionOrBrowserPage(url?: string): boolean {
+  if (!url) {
+    return false;
+  }
+
+  return url.startsWith('moz-extension://')
+    || url.startsWith('chrome-extension://')
+    || url.startsWith('about:');
+}
+
+async function resolveTargetTabId(explicitTabId?: number): Promise<number | undefined> {
+  if (explicitTabId) {
+    return explicitTabId;
+  }
+
+  const tabs = await tabsQuery({ currentWindow: true });
+  const activeTab = tabs.find((tab) => tab.active);
+  if (activeTab?.id && !isExtensionOrBrowserPage(activeTab.url)) {
+    return activeTab.id;
+  }
+
+  const fallbackTab = tabs
+    .filter((tab) => tab.id && !isExtensionOrBrowserPage(tab.url))
+    .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
+
+  return fallbackTab?.id;
+}
+
+async function restoreLastSummaryOrIdle(): Promise<void> {
+  const lastSummary = await getStorage<SummaryData>(STORAGE_KEY_LAST_SUMMARY);
+  if (lastSummary) {
+    await setStorage(STORAGE_KEY_UI_STATE, 'done');
+    ignoreAsyncResult(runtimeSendMessage({
+      action: 'SUMMARY_READY',
+      payload: lastSummary,
+    } satisfies Message));
+    return;
+  }
+
+  await setStorage(STORAGE_KEY_UI_STATE, 'idle');
+}
+
 export function initBackground(): void {
   console.log('Inti background script loading...');
 
@@ -143,16 +185,13 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
   }
   const apiUrl = baseUrl.replace(/\/$/, '') + '/api/summarize';
 
-  // 3. Get active tab if not provided
-  let targetTabId = tabId;
-  if (!targetTabId) {
-    const [tab] = await tabsQuery({ active: true, lastFocusedWindow: true });
-    targetTabId = tab?.id;
-  }
+  // 3. Resolve the target tab. When Inti is opened as an extension page on
+  // Android, the active tab is the extension itself, so we fall back to the
+  // most recently accessed real page in the window.
+  const targetTabId = await resolveTargetTabId(tabId);
 
   if (!targetTabId) {
-    await setBadge(BADGE_ERROR);
-    broadcastError('No active tab found.');
+    await restoreLastSummaryOrIdle();
     return false;
   }
 

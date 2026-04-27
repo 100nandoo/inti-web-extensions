@@ -13,6 +13,9 @@
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
   const isDirty = $derived(apiUrl.trim() !== savedApiUrl || apiKey.trim() !== savedApiKey);
+  const showOpenIntiPage = $derived(!onclose
+    && navigator.userAgent.includes('Android')
+    && navigator.userAgent.includes('Firefox'));
 
   $effect(() => {
     getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
@@ -62,6 +65,10 @@
     scheduleReset();
   }
 
+  function openIntiPage() {
+    window.location.assign(chrome.runtime.getURL('popup.html'));
+  }
+
   function handleInput() {
     if (saveStatus !== 'idle') {
       saveStatus = 'idle';
@@ -83,7 +90,12 @@
 
 <div class="panel">
   <div class="panel-header">
-    <span class="panel-title">Settings</span>
+    <div class="header-main">
+      <span class="panel-title">Settings</span>
+      {#if showOpenIntiPage}
+        <button class="open-inti-btn" onclick={openIntiPage}>Open Inti</button>
+      {/if}
+    </div>
     <div class="header-right">
       <button
         class="theme-toggle"
@@ -157,6 +169,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .header-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
   }
 
   .panel-title {
@@ -266,7 +286,18 @@
     align-self: flex-start;
   }
 
+  .open-inti-btn {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border-input);
+  }
+
   button:hover { background: var(--accent-hover); }
+
+  .open-inti-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+  }
 
   button:disabled {
     background: color-mix(in srgb, var(--accent) 35%, var(--bg-hover));
