@@ -34,6 +34,8 @@ pnpm run dev
 
 Vite watches `src/` and rebuilds to `build/` on every change. To load the extension during development, run a full build first (see below) then reload the unpacked extension in your browser.
 
+For UI-only changes in the popup, sidebar, overlay, or options page, the main manual check is to rebuild and reload the unpacked extension for the target browser you changed.
+
 ## Building
 
 ```bash
@@ -80,11 +82,12 @@ src/
 ├── options/
 │   ├── options.html
 │   ├── options.ts
-│   └── Options.svelte         # Settings page (API URL)
+│   └── Options.svelte         # Settings page (API URL, instruction, theme)
 └── shared/
     ├── types.ts               # Shared TypeScript types
     ├── constants.ts           # Storage keys and badge config
-    └── storage.ts             # chrome.storage.local typed wrappers
+    ├── storage.ts             # chrome.storage.local / browser.storage.local typed wrappers
+    └── SettingsPanel.svelte   # In-extension settings panel (API URL, API key, theme)
 
 manifests/
 ├── base.json                  # Shared MV3 manifest
@@ -107,15 +110,15 @@ Popup / Sidebar
     │  TRIGGER_SUMMARY
     ▼
 Service Worker ──── badge: …
-    │  reads apiUrl from storage
+    │  reads settings from storage
     │  EXTRACT
     ▼
 Content Script (Readability)
     │  ArticleData
     ▼
-Service Worker ──── POST apiUrl ──── { summary }
+Service Worker ──── POST {apiUrl}/api/summarize ──── { summary }
     │                                     │
-    │  save to chrome.storage.local ◄─────┘
+    │  save to extension storage ◄────────┘
     │
     ├── badge: ✓ / !
     ├── SUMMARY_READY → Sidebar / Popup
@@ -133,6 +136,36 @@ Service Worker ──── POST apiUrl ──── { summary }
 | Chrome desktop | Side panel | ✓ | ✓ |
 | Firefox desktop | Sidebar | ✓ | ✓ |
 | Firefox Android | Page overlay | — | ✓ |
+
+## Settings and storage
+
+Inti stores all persistent state in extension storage, not page `localStorage`.
+
+| Key | Type | Notes |
+|---|---|---|
+| `settings` | `Settings` | Includes `apiUrl`, optional `apiKey`, optional `instruction`, and optional `theme` |
+| `lastSummary` | `SummaryData` | Last successful summary shown in popup/sidebar/overlay |
+| `uiState` | `UIState` | Current UI state such as `loading` or `error` |
+
+Settings surfaces:
+
+- [src/options/Options.svelte](/Users/fernando/Codes/inti-web-extensions/src/options/Options.svelte:1) is the full settings page. It manages `apiUrl`, optional `instruction`, and `theme`.
+- [src/shared/SettingsPanel.svelte](/Users/fernando/Codes/inti-web-extensions/src/shared/SettingsPanel.svelte:1) is the compact in-extension settings panel shared by popup and sidebar. It manages `apiUrl`, optional `apiKey`, and `theme`.
+- The compact panel uses one shared save button for `apiUrl` and `apiKey`. That button is disabled until either field differs from the last saved values, and status feedback resets as soon as the user edits a field again.
+
+Implementation details:
+
+- [src/shared/storage.ts](/Users/fernando/Codes/inti-web-extensions/src/shared/storage.ts:1) wraps extension storage reads and writes.
+- [src/shared/webext.ts](/Users/fernando/Codes/inti-web-extensions/src/shared/webext.ts:7) prefers `browser` on Firefox and falls back to `chrome`.
+- [src/background/service-worker.ts](/Users/fernando/Codes/inti-web-extensions/src/background/service-worker.ts:137) reads `settings` before each summarization request.
+- If `settings.apiKey` is present, the service worker sends it as the `X-API-Key` header in [src/background/service-worker.ts](/Users/fernando/Codes/inti-web-extensions/src/background/service-worker.ts:191).
+
+Firefox debugging:
+
+- Open `about:debugging`
+- Inspect the extension
+- In the extension toolbox, open `Storage`
+- Check `Extension Storage` for the `settings`, `lastSummary`, and `uiState` entries
 
 ## Message types
 

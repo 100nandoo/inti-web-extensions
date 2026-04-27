@@ -36,11 +36,17 @@ Download the latest release for your browser from the [Releases](../../releases)
 
 ### 1. Deploy the API
 
-Set up your own instance of [inti-api](https://github.com/your-org/inti-api) and note the URL of your `/summarize` endpoint.
+Set up your own instance of [inti-api](https://github.com/your-org/inti-api) and note the base URL of your server. The extension sends requests to `<base-url>/api/summarize`.
 
 ### 2. Configure the extension
 
-After installing Inti, open its settings (right-click the extension icon → **Options**, or find it in your browser's extension manager) and paste in your API URL.
+After installing Inti, open its settings and enter your API URL.
+
+- On the full Options page, you can set the API URL, optional summarization instruction, and theme.
+- In the popup/sidebar settings panel, you can set the API URL, optional `X-API-Key` header value, and theme.
+- The popup/sidebar settings panel uses one shared save button for the API URL and API key. The button is disabled until one of those values changes.
+
+Inti stores these settings in extension storage (`chrome.storage.local` / `browser.storage.local`), not in page `localStorage`.
 
 ---
 
@@ -52,7 +58,11 @@ Click the Inti icon on any article page and hit **Summarize Article**. Inti extr
 - **Firefox desktop** — in the sidebar
 - **Firefox Android** — as an overlay on the page
 
-The last summary is saved locally and restored the next time you open the extension.
+The last summary and your settings are saved locally in the browser's extension storage and restored the next time you open the extension.
+
+When `settings.apiKey` is configured, Inti sends it as the `X-API-Key` header on summarization requests.
+
+On Firefox desktop, you can inspect this data in `about:debugging` by opening the extension toolbox and checking the `Storage` tab under `Extension Storage`.
 
 ---
 
