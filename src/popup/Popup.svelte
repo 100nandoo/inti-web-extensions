@@ -2,7 +2,7 @@
   import type { SummaryData, UIState, Message } from '../shared/types.js';
   import { getStorage } from '../shared/storage.js';
   import { ignoreAsyncResult, runtimeSendMessage, tabsQuery } from '../shared/webext.js';
-  import { STORAGE_KEY_LAST_SUMMARY } from '../shared/constants.js';
+  import { STORAGE_KEY_LAST_SUMMARY, STORAGE_KEY_UI_STATE } from '../shared/constants.js';
   import SummaryView from '../content/overlay/SummaryView.svelte';
   import LoadingState from '../content/overlay/LoadingState.svelte';
   import ErrorState from '../content/overlay/ErrorState.svelte';
@@ -17,10 +17,26 @@
   let hasAutoTriggered = $state(false);
 
   $effect(() => {
-    // Restore last summary from storage on open
-    getStorage<SummaryData>(STORAGE_KEY_LAST_SUMMARY).then((stored) => {
-      if (stored) {
-        summary = stored;
+    // Restore the current UI state on open without letting a stale summary
+    // overwrite an in-flight request on Android.
+    Promise.all([
+      getStorage<UIState>(STORAGE_KEY_UI_STATE),
+      getStorage<SummaryData>(STORAGE_KEY_LAST_SUMMARY),
+    ]).then(([storedState, storedSummary]) => {
+      if (storedState === 'loading') {
+        uiState = 'loading';
+        summary = null;
+        return;
+      }
+
+      if (storedState === 'error') {
+        uiState = 'error';
+        summary = null;
+        return;
+      }
+
+      if (storedSummary) {
+        summary = storedSummary;
         uiState = 'done';
       }
     });
@@ -29,14 +45,54 @@
     function onMessage(message: Message) {
       if (message.action === 'SUMMARY_READY') {
         summary = message.payload as SummaryData;
+        errorMessage = '';
         uiState = 'done';
+      } else if (message.action === 'SHOW_LOADING') {
+        summary = null;
+        errorMessage = '';
+        uiState = 'loading';
       } else if (message.action === 'ERROR') {
+        summary = null;
         errorMessage = message.payload as string;
         uiState = 'error';
       }
     }
+
+    function onStorageChanged(
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) {
+      if (areaName !== 'local') {
+        return;
+      }
+
+      const stateChange = changes[STORAGE_KEY_UI_STATE];
+      if (stateChange) {
+        const nextState = stateChange.newValue as UIState | undefined;
+        if (nextState === 'loading') {
+          summary = null;
+          errorMessage = '';
+          uiState = 'loading';
+        } else if (nextState === 'error') {
+          summary = null;
+          uiState = 'error';
+        }
+      }
+
+      const summaryChange = changes[STORAGE_KEY_LAST_SUMMARY];
+      if (summaryChange?.newValue) {
+        summary = summaryChange.newValue as SummaryData;
+        errorMessage = '';
+        uiState = 'done';
+      }
+    }
+
     chrome.runtime.onMessage.addListener(onMessage);
-    return () => chrome.runtime.onMessage.removeListener(onMessage);
+    chrome.storage.onChanged.addListener(onStorageChanged);
+    return () => {
+      chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+    };
   });
 
   $effect(() => {

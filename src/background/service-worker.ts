@@ -217,23 +217,22 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
     };
     await setStorage(STORAGE_KEY_LAST_SUMMARY, summaryData);
 
+    await setStorage(STORAGE_KEY_UI_STATE, 'done');
+
     // 7. Success badge
     await setBadge(BADGE_SUCCESS);
 
     // 8. Route to UI surfaces
-    if (!isAndroid) {
-      ignoreAsyncResult(runtimeSendMessage({
-        action: 'SUMMARY_READY',
-        payload: summaryData,
-      } satisfies Message));
-    }
+    ignoreAsyncResult(runtimeSendMessage({
+      action: 'SUMMARY_READY',
+      payload: summaryData,
+    } satisfies Message));
 
     ignoreAsyncResult(tabsSendMessage(targetTabId, {
       action: 'SHOW_OVERLAY',
       payload: summaryData,
     } satisfies Message));
-    
-    await setStorage(STORAGE_KEY_UI_STATE, 'idle');
+
     return true;
   } catch (e) {
     console.error('API call failed', e);
