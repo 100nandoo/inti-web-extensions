@@ -13,6 +13,21 @@ export default defineConfig({
   publicDir: 'icons',
   outDir: 'dist',
   outDirTemplate: '{{browser}}-mv{{manifestVersion}}',
+  hooks: {
+    'build:manifestGenerated': (wxt, manifest) => {
+      if (wxt.config.browser !== 'firefox') {
+        return;
+      }
+
+      if (process.env.INTI_FIREFOX_TARGET !== 'desktop') {
+        return;
+      }
+
+      if ('browser_action' in manifest && manifest.browser_action) {
+        delete manifest.browser_action.default_popup;
+      }
+    },
+  },
   vite: () => ({
     optimizeDeps: {
       exclude: ['virtual:wxt-plugins', 'virtual:wxt-html-plugins'],

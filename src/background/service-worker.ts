@@ -20,8 +20,16 @@ type ToolbarActionApi = {
   setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void;
 };
 
+type SidebarActionApi = {
+  open?: () => Promise<void> | void;
+};
+
 function getToolbarAction(): ToolbarActionApi | undefined {
   return (chrome.action ?? chrome.browserAction) as ToolbarActionApi | undefined;
+}
+
+function getSidebarAction(): SidebarActionApi | undefined {
+  return (chrome as typeof chrome & { sidebarAction?: SidebarActionApi }).sidebarAction;
 }
 
 export function initBackground(): void {
@@ -75,39 +83,51 @@ async function triggerFlow(tab: chrome.tabs.Tab, isAndroid: boolean) {
   }
   const tabId = tab.id;
 
-  if (!isAndroid && chrome.sidePanel) {
-    // Chrome desktop: open side panel first; it shows its own loading state
-    ignoreAsyncResult(chrome.sidePanel.open({ tabId }));
-    handleTriggerSummary(isAndroid, tabId).catch((err: unknown) => {
-      broadcastError(String(err));
-    });
-  } else if (!isAndroid) {
-    // Firefox desktop: open sidebar IMMEDIATELY to preserve user gesture
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ignoreAsyncResult((chrome as any).sidebarAction?.open?.());
-
-    // Show loading overlay immediately for instant feedback
-    ignoreAsyncResult(tabsSendMessage(tabId, { action: 'SHOW_LOADING' } satisfies Message));
-
-    try {
-      await handleTriggerSummary(isAndroid, tabId);
-    } catch (err: unknown) {
-      broadcastError(String(err));
-    }
-
-    // Dismiss the loading overlay once summary is ready (sidebar will show result)
-    ignoreAsyncResult(tabsSendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message));
-  } else {
+  if (isAndroid) {
     // Android: overlay shows full result inline
     console.log('Android flow started for tab', tabId);
     handleTriggerSummary(isAndroid, tabId).catch((err: unknown) => {
       console.error('Android flow error', err);
       broadcastError(String(err));
     });
+    return;
+  }
+
+  if (!chrome.sidePanel) {
+    const sidebarAction = getSidebarAction();
+    try {
+      await Promise.resolve(sidebarAction?.open?.());
+    } catch (error) {
+      console.warn('Could not open Firefox sidebar from user action', error);
+    }
+
+    try {
+      const hasSummary = await handleTriggerSummary(isAndroid, tabId);
+      if (hasSummary) {
+        ignoreAsyncResult(tabsSendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message));
+      }
+    } catch (err: unknown) {
+      broadcastError(String(err));
+    }
+    return;
+  }
+
+  try {
+    const hasSummary = await handleTriggerSummary(isAndroid, tabId);
+    if (!hasSummary) {
+      return;
+    }
+
+    const sidebarOpened = await openDesktopSidebar(tabId);
+    if (sidebarOpened) {
+      ignoreAsyncResult(tabsSendMessage(tabId, { action: 'HIDE_OVERLAY' } satisfies Message));
+    }
+  } catch (err: unknown) {
+    broadcastError(String(err));
   }
 }
 
-async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise<void> {
+async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise<boolean> {
   // 1. Show loading badge and broadcast loading state
   await setBadge(BADGE_LOADING);
   await setStorage(STORAGE_KEY_UI_STATE, 'loading');
@@ -119,7 +139,7 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
   if (!baseUrl) {
     await setBadge(BADGE_ERROR);
     broadcastError('API URL not configured. Open Inti settings to set it up.');
-    return;
+    return false;
   }
   const apiUrl = baseUrl.replace(/\/$/, '') + '/api/summarize';
 
@@ -133,7 +153,7 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
   if (!targetTabId) {
     await setBadge(BADGE_ERROR);
     broadcastError('No active tab found.');
-    return;
+    return false;
   }
 
   // 4. Extract article content via content script
@@ -152,7 +172,7 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
     console.error('Extraction failed', e);
     await setBadge(BADGE_ERROR);
     broadcastError('Could not extract content from this page. Make sure the page is fully loaded.');
-    return;
+    return false;
   }
 
   // 5. Call summarization API
@@ -214,12 +234,37 @@ async function handleTriggerSummary(isAndroid: boolean, tabId?: number): Promise
     } satisfies Message));
     
     await setStorage(STORAGE_KEY_UI_STATE, 'idle');
+    return true;
   } catch (e) {
     console.error('API call failed', e);
     await setBadge(BADGE_ERROR);
     await setStorage(STORAGE_KEY_UI_STATE, 'error');
     broadcastError(String(e));
-    return;
+    return false;
+  }
+}
+
+async function openDesktopSidebar(tabId: number): Promise<boolean> {
+  if (chrome.sidePanel) {
+    try {
+      await chrome.sidePanel.open({ tabId });
+      return true;
+    } catch (error) {
+      console.warn('Could not open Chrome side panel after summary completed', error);
+    }
+  }
+
+  const sidebarAction = getSidebarAction();
+  if (!sidebarAction?.open) {
+    return false;
+  }
+
+  try {
+    await Promise.resolve(sidebarAction.open());
+    return true;
+  } catch (error) {
+    console.warn('Could not open Firefox sidebar after summary completed', error);
+    return false;
   }
 }
 
