@@ -7,14 +7,19 @@
 
   let apiUrl = $state('');
   let apiKey = $state('');
+  let savedApiUrl = $state('');
+  let savedApiKey = $state('');
   let theme = $state<'light' | 'dark'>('light');
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
+  const isDirty = $derived(apiUrl.trim() !== savedApiUrl || apiKey.trim() !== savedApiKey);
 
   $effect(() => {
     getStorage<Settings>(STORAGE_KEY_SETTINGS).then((stored) => {
-      if (stored?.apiUrl) apiUrl = stored.apiUrl;
-      if (stored?.apiKey) apiKey = stored.apiKey;
+      apiUrl = stored?.apiUrl ?? '';
+      apiKey = stored?.apiKey ?? '';
+      savedApiUrl = apiUrl.trim();
+      savedApiKey = apiKey.trim();
       if (stored?.theme) {
         theme = stored.theme;
         applyTheme(stored.theme);
@@ -51,8 +56,20 @@
       delete settings.apiKey;
     }
     await setStorage<Settings>(STORAGE_KEY_SETTINGS, settings);
+    savedApiUrl = trimmed;
+    savedApiKey = trimmedApiKey;
     saveStatus = 'saved';
     scheduleReset();
+  }
+
+  function handleInput() {
+    if (saveStatus !== 'idle') {
+      saveStatus = 'idle';
+    }
+    if (statusTimeout) {
+      clearTimeout(statusTimeout);
+      statusTimeout = null;
+    }
   }
 
   function scheduleReset() {
@@ -92,36 +109,36 @@
 
   <div class="field">
     <label for="sp-api-url">API URL</label>
-    <div class="input-row">
-      <input
-        id="sp-api-url"
-        type="url"
-        placeholder="https://your-api.com/summarize"
-        bind:value={apiUrl}
-        onkeydown={(e) => e.key === 'Enter' && save()}
-        class:invalid={saveStatus === 'error'}
-      />
-      <button onclick={save}>Save</button>
-    </div>
+    <input
+      id="sp-api-url"
+      type="url"
+      placeholder="https://your-api.com/summarize"
+      bind:value={apiUrl}
+      oninput={handleInput}
+      onkeydown={(e) => e.key === 'Enter' && save()}
+      class:invalid={saveStatus === 'error'}
+    />
+  </div>
+
+  <div class="field">
+    <label for="sp-api-key">X-API-Key Header</label>
+    <input
+      id="sp-api-key"
+      type="text"
+      placeholder="your-api-key"
+      bind:value={apiKey}
+      oninput={handleInput}
+      onkeydown={(e) => e.key === 'Enter' && save()}
+    />
+  </div>
+
+  <div class="actions">
+    <button class="save-btn" onclick={save} disabled={!isDirty}>Save settings</button>
     {#if saveStatus === 'saved'}
       <span class="status success">Saved.</span>
     {:else if saveStatus === 'error'}
       <span class="status error">Enter a valid URL.</span>
     {/if}
-  </div>
-
-  <div class="field">
-    <label for="sp-api-key">X-API-Key Header</label>
-    <div class="input-row">
-      <input
-        id="sp-api-key"
-        type="text"
-        placeholder="your-api-key"
-        bind:value={apiKey}
-        onkeydown={(e) => e.key === 'Enter' && save()}
-      />
-      <button onclick={save}>Save</button>
-    </div>
   </div>
 </div>
 
@@ -194,7 +211,7 @@
   .field {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.4rem;
   }
 
   label {
@@ -203,14 +220,16 @@
     color: var(--text-secondary);
   }
 
-  .input-row {
+  .actions {
     display: flex;
-    gap: 0.4rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    margin-top: 0.15rem;
   }
 
   input[type="url"],
   input[type="text"] {
-    flex: 1;
     padding: 0.4rem 0.6rem;
     border: 1px solid var(--border-input);
     border-radius: 5px;
@@ -243,7 +262,21 @@
     transition: background 0.15s;
   }
 
+  .save-btn {
+    align-self: flex-start;
+  }
+
   button:hover { background: var(--accent-hover); }
+
+  button:disabled {
+    background: color-mix(in srgb, var(--accent) 35%, var(--bg-hover));
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  button:disabled:hover {
+    background: color-mix(in srgb, var(--accent) 35%, var(--bg-hover));
+  }
 
   .status {
     font-size: 0.75rem;
